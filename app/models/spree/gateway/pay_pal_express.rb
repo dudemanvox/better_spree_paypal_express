@@ -57,11 +57,7 @@ module Spree
         # This is mainly so we can use it later on to refund the payment if the user wishes.
         transaction_id = pp_response.do_express_checkout_payment_response_details.payment_info.first.transaction_id
         express_checkout.update_column(:transaction_id, transaction_id)
-        # This is rather hackish, required for payment/processing handle_response code.
-        Class.new do
-          def success?; true; end
-          def authorization; nil; end
-        end.new
+        active_merchant_response_from_paypal(pp_response)
       else
         class << pp_response
           def to_s
@@ -72,6 +68,7 @@ module Spree
       end
     end
 
+    # 
     def refund(payment, amount)
       refund_type = payment.amount == amount.to_f ? "Full" : "Partial"
       refund_transaction = provider.build_refund_transaction({
@@ -89,17 +86,22 @@ module Spree
           :state => "refunded",
           :refund_type => refund_type
         })
-
-        payment.class.create!(
-          :order => payment.order,
-          :source => payment,
-          :payment_method => payment.payment_method,
-          :amount => amount.to_f.abs * -1,
-          :response_code => refund_transaction_response.RefundTransactionID,
-          :state => 'completed'
-        )
       end
-      refund_transaction_response
+      active_merchant_response_from_paypal(refund_transaction_response)
+    end
+
+    def active_merchant_response_from_paypal(paypal_response)
+      message = if paypal_response.success?
+                  "Success"
+                else
+                  paypal_response.errors.map(&:long_message).join(" ")
+                end
+      active_merchant_response = ActiveMerchant::Billing::Response.new(
+        paypal_response.success?,             # Was the request successful
+        message,                              # Message goes here - if we fail, we have errors, else it is blank
+        JSON.parse(paypal_response.to_json),  # Params - should be a hash
+        {test: preferred_server == "sandbox"} # Keep track of test vs live transactions
+      )
     end
   end
 end

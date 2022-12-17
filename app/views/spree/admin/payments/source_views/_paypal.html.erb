@@ -15,9 +15,7 @@
       </dl>
     </div>
 
-    <% if payment.source.state != 'refunded' %>
-      <%= button_link_to Spree.t('actions.refund', scope: :paypal), spree.paypal_refund_admin_order_payment_path(@order, payment), icon: 'money' %>
-    <% else %>
+    <% if payment.source.state == 'refunded' %>
       <div class="alpha six columns">
         <dl>
           <dt><%= Spree.t(:state, :scope => :paypal) %>:</dt>
